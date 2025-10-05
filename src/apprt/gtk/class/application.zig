@@ -715,6 +715,10 @@ pub const Application = extern struct {
             .show_on_screen_keyboard => return Action.showOnScreenKeyboard(target),
             .command_finished => return Action.commandFinished(target, value),
 
+            .toggle_search => return Action.toggleSearch(target),
+            .next_search_match => return Action.nextSearchMatch(target),
+            .previous_search_match => return Action.previousSearchMatch(target),
+
             // Unimplemented
             .secure_input,
             .close_all_windows,
@@ -729,9 +733,6 @@ pub const Application = extern struct {
             .check_for_updates,
             .undo,
             .redo,
-            .toggle_search,
-            .next_search_match,
-            .previous_search_match,
             => {
                 log.warn("unimplemented action={}", .{action});
                 return false;
@@ -1805,6 +1806,36 @@ const Action = struct {
             .surface => |core| {
                 const surface = core.rt_surface.surface;
                 return surface.as(gtk.Widget).activateAction("win.close", null) != 0;
+            },
+        }
+    }
+
+    pub fn toggleSearch(target: apprt.Target) bool {
+        switch (target) {
+            .app => return false,
+            .surface => |core| {
+                const surface = core.rt_surface.surface;
+                return surface.as(gtk.Widget).activateAction("tab.toggle-search", null) != 0;
+            },
+        }
+    }
+
+    pub fn nextSearchMatch(target: apprt.Target) bool {
+        switch (target) {
+            .app => return false,
+            .surface => |core| {
+                const surface = core.rt_surface.surface;
+                return surface.as(gtk.Widget).activateAction("tab.next-search-match", null) != 0;
+            },
+        }
+    }
+
+    pub fn previousSearchMatch(target: apprt.Target) bool {
+        switch (target) {
+            .app => return false,
+            .surface => |core| {
+                const surface = core.rt_surface.surface;
+                return surface.as(gtk.Widget).activateAction("tab.previous-search-match", null) != 0;
             },
         }
     }

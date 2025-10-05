@@ -1,4 +1,5 @@
 using Gtk 4.0;
+using Adw 1;
 
 template $GhosttyTab: Box {
   styles [
@@ -11,8 +12,14 @@ template $GhosttyTab: Box {
   title: bind $computed_title(template.config, split_tree.active-surface as <$GhosttySurface>.title, split_tree.active-surface as <$GhosttySurface>.title-override, split_tree.is-zoomed, split_tree.active-surface as <$GhosttySurface>.bell-ringing) as <string>;
   tooltip: bind split_tree.active-surface as <$GhosttySurface>.pwd;
 
-  $GhosttySplitTree split_tree {
-    notify::active-surface => $notify_active_surface();
-    notify::tree => $notify_tree();
+  Adw.ToolbarView {
+    [top]
+    $GhosttySearchOverlay search_overlay {
+    }
+
+    $GhosttySplitTree split_tree {
+      notify::active-surface => $notify_active_surface();
+      notify::tree => $notify_tree();
+    }
   }
 }

@@ -124,6 +124,13 @@ label.resize-overlay {
 }
 
 /*
+ * Search Overlay
+ */
+.search-overlay-entry {
+  min-width: 300px;
+}
+
+/*
  * Splits
  */
 

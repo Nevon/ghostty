@@ -1,0 +1,52 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $GhosttySearchOverlay : Gtk.Box {
+  Gtk.SearchBar search_bar {
+    child: Adw.Clamp {
+      hexpand: true;
+      maximum-size: 500;
+
+      child: Gtk.Box {
+        spacing: 6;
+
+        Gtk.SearchEntry search {
+          hexpand: true;
+          placeholder-text: _("Search scrollback…");
+          search-changed => $search_changed();
+          stop-search => $search_stopped();
+          next-match => $search_next();
+          previous-match => $search_previous();
+
+          styles [
+            "search-overlay-entry",
+          ]
+        }
+
+        Gtk.Label counter {
+          label: "";
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Gtk.Button button_previous {
+          icon-name: "go-up-symbolic";
+          tooltip-text: _("Previous Match");
+          clicked => $previous_clicked();
+        }
+
+        Gtk.Button button_next {
+          icon-name: "go-down-symbolic";
+          tooltip-text: _("Next Match");
+          clicked => $next_clicked();
+        }
+      };
+    };
+
+    styles [
+      "view",
+    ]
+  }
+}

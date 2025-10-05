@@ -651,6 +651,18 @@ foreground: Color = .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
 @"selection-foreground": ?TerminalColor = null,
 @"selection-background": ?TerminalColor = null,
 
+/// The background and foreground colors for search matches (non-current).
+/// Defaults to bright yellow background if not set.
+/// Specified as either hex (`#RRGGBB` or `RRGGBB`) or a named X11 color.
+@"search-match-background": ?TerminalColor = null,
+@"search-match-foreground": ?TerminalColor = null,
+
+/// The background and foreground colors for the current focused search match.
+/// Defaults to bright orange background if not set.
+/// Specified as either hex (`#RRGGBB` or `RRGGBB`) or a named X11 color.
+@"search-match-current-background": ?TerminalColor = null,
+@"search-match-current-foreground": ?TerminalColor = null,
+
 /// Whether to clear selected text when typing. This defaults to `true`.
 /// This is typical behavior for most terminal emulators as well as
 /// text input fields. If you set this to `false`, then the selected text
@@ -6110,6 +6122,13 @@ pub const Keybinds = struct {
             alloc,
             .{ .key = .{ .unicode = 'p' }, .mods = inputpkg.ctrlOrSuper(.{ .shift = true }) },
             .toggle_command_palette,
+        );
+
+        // Toggle search, matches common shortcuts
+        try self.set.put(
+            alloc,
+            .{ .key = .{ .unicode = 'f' }, .mods = inputpkg.ctrlOrSuper(.{}) },
+            .{ .toggle_search = {} },
         );
 
         // Mac-specific keyboard bindings.

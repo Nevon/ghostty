@@ -18,6 +18,7 @@ const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const Config = @import("config.zig").Config;
 const Application = @import("application.zig").Application;
+const SearchOverlay = @import("search_overlay.zig").SearchOverlay;
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
 
@@ -158,6 +159,7 @@ pub const Tab = extern struct {
         tooltip: ?[:0]const u8 = null,
 
         // Template bindings
+        search_overlay: *SearchOverlay,
         split_tree: *SplitTree,
 
         pub var offset: c_int = 0;
@@ -186,6 +188,36 @@ pub const Tab = extern struct {
             priv.config = app.getConfig();
         }
 
+        // Connect SearchOverlay signals
+        _ = SearchOverlay.signals.search_changed.connect(
+            priv.search_overlay,
+            *Tab,
+            signalSearchChanged,
+            self,
+            .{},
+        );
+        _ = SearchOverlay.signals.search_next.connect(
+            priv.search_overlay,
+            *Tab,
+            signalSearchNext,
+            self,
+            .{},
+        );
+        _ = SearchOverlay.signals.search_previous.connect(
+            priv.search_overlay,
+            *Tab,
+            signalSearchPrevious,
+            self,
+            .{},
+        );
+        _ = SearchOverlay.signals.search_stopped.connect(
+            priv.search_overlay,
+            *Tab,
+            signalSearchStopped,
+            self,
+            .{},
+        );
+
         // Create our initial surface in the split tree.
         priv.split_tree.newSplit(.right, null) catch |err| switch (err) {
             error.OutOfMemory => {
@@ -204,6 +236,9 @@ pub const Tab = extern struct {
         const actions = [_]ext.actions.Action(Self){
             .init("close", actionClose, s_param_type),
             .init("ring-bell", actionRingBell, null),
+            .init("toggle-search", actionToggleSearch, null),
+            .init("next-search-match", actionNextSearchMatch, null),
+            .init("previous-search-match", actionPreviousSearchMatch, null),
         };
 
         _ = ext.actions.addAsGroup(Self, self, "tab", &actions);
@@ -373,6 +408,53 @@ pub const Tab = extern struct {
         page.setNeedsAttention(@intFromBool(true));
     }
 
+    fn actionToggleSearch(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const current_mode = priv.search_overlay.getSearchMode();
+        log.info("toggling search mode from {} to {}", .{ current_mode, !current_mode });
+        priv.search_overlay.setSearchMode(!current_mode);
+    }
+
+    fn actionNextSearchMatch(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        const result = surface.nextSearchMatch() catch |err| {
+            log.err("next search match failed: {}", .{err});
+            return;
+        };
+
+        if (result) |r| {
+            priv.search_overlay.updateCounter(r.current, r.total);
+        }
+    }
+
+    fn actionPreviousSearchMatch(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        const result = surface.previousSearchMatch() catch |err| {
+            log.err("previous search match failed: {}", .{err});
+            return;
+        };
+
+        if (result) |r| {
+            priv.search_overlay.updateCounter(r.current, r.total);
+        }
+    }
+
     fn closureComputedTitle(
         _: *Self,
         config_: ?*Config,
@@ -422,6 +504,71 @@ pub const Tab = extern struct {
         return glib.ext.dupeZ(u8, buf.written());
     }
 
+    //---------------------------------------------------------------
+    // SearchOverlay Signal Handlers
+
+    fn signalSearchChanged(_: *SearchOverlay, text: [*:0]const u8, tab: *Tab) callconv(.c) void {
+        const priv = tab.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        // Perform search on active surface
+        const text_slice: [:0]const u8 = std.mem.span(text);
+        const result = surface.performSearch(text_slice) catch |err| {
+            log.err("search failed: {}", .{err});
+            return;
+        };
+
+        // Update counter
+        if (result) |r| {
+            priv.search_overlay.updateCounter(r.current, r.total);
+        }
+    }
+
+    fn signalSearchNext(_: *SearchOverlay, tab: *Tab) callconv(.c) void {
+        const priv = tab.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        // Navigate to next match
+        const result = surface.nextSearchMatch() catch |err| {
+            log.err("next search match failed: {}", .{err});
+            return;
+        };
+
+        // Update counter
+        if (result) |r| {
+            priv.search_overlay.updateCounter(r.current, r.total);
+        }
+    }
+
+    fn signalSearchPrevious(_: *SearchOverlay, tab: *Tab) callconv(.c) void {
+        const priv = tab.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        // Navigate to previous match
+        const result = surface.previousSearchMatch() catch |err| {
+            log.err("previous search match failed: {}", .{err});
+            return;
+        };
+
+        // Update counter
+        if (result) |r| {
+            priv.search_overlay.updateCounter(r.current, r.total);
+        }
+    }
+
+    fn signalSearchStopped(_: *SearchOverlay, tab: *Tab) callconv(.c) void {
+        const priv = tab.private();
+        const surface = priv.split_tree.getActiveSurface() orelse return;
+
+        // Close search and clear highlights
+        surface.closeSearch() catch |err| {
+            log.err("close search failed: {}", .{err});
+            return;
+        };
+    }
+
+    //---------------------------------------------------------------
+
     const C = Common(Self, Private);
     pub const as = C.as;
     pub const ref = C.ref;
@@ -456,6 +603,7 @@ pub const Tab = extern struct {
             });
 
             // Bindings
+            class.bindTemplateChildPrivate("search_overlay", .{});
             class.bindTemplateChildPrivate("split_tree", .{});
 
             // Template Callbacks

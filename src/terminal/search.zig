@@ -480,7 +480,8 @@ const SlidingWindow = struct {
         assert(data_len == self.data.len());
 
         // Integrity check: verify our data offset is within bounds.
-        assert(self.data_offset < self.data.len());
+        // Note: data_offset can equal data.len() when we've consumed all data.
+        assert(self.data_offset <= self.data.len());
     }
 };
 
@@ -880,4 +881,34 @@ test "SlidingWindow single append match on boundary" {
         } }, s.pages.pointFromPin(.active, sel.end()).?);
     }
     try testing.expect(w.next() == null);
+}
+
+test "PageListSearch with unicode prompt" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // Create a screen with realistic content including unicode
+    var s = try Screen.init(alloc, 80, 24, 0);
+    defer s.deinit();
+
+    // Simulate a prompt with unicode characters like the user has
+    try s.testWriteString("ghostty on  search [!?] via ↯ ❯ ");
+    try s.testWriteString("ls -la\n");
+    try s.testWriteString("total 48\n");
+
+    // Try searching for a simple string that should match
+    var search = try PageListSearch.init(alloc, &s.pages, "search");
+    defer search.deinit();
+
+    // We should find "search" in the first line
+    const sel1 = (try search.next()).?;
+    const start_pt = s.pages.pointFromPin(.active, sel1.start()).?;
+    const end_pt = s.pages.pointFromPin(.active, sel1.end()).?;
+
+    // Verify we found "search"
+    try testing.expectEqual(@as(usize, 0), start_pt.active.y);
+    try testing.expect(start_pt.active.x < end_pt.active.x);
+
+    // Should be no more matches
+    try testing.expect((try search.next()) == null);
 }

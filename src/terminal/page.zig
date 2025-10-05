@@ -1648,7 +1648,8 @@ pub const Page = struct {
                         try writer.print("{u}", .{cell.content.codepoint});
                         if (opts.cell_map) |cell_map| {
                             last_x = x + 1;
-                            try cell_map.map.append(cell_map.alloc, .{
+                            const utf8_len = std.unicode.utf8CodepointSequenceLength(cell.content.codepoint) catch unreachable;
+                            for (0..utf8_len) |_| try cell_map.map.append(cell_map.alloc, .{
                                 .x = x,
                                 .y = y,
                             });
@@ -1659,7 +1660,8 @@ pub const Page = struct {
                         try writer.print("{u}", .{cell.content.codepoint});
                         if (opts.cell_map) |cell_map| {
                             last_x = x + 1;
-                            try cell_map.map.append(cell_map.alloc, .{
+                            const utf8_len = std.unicode.utf8CodepointSequenceLength(cell.content.codepoint) catch unreachable;
+                            for (0..utf8_len) |_| try cell_map.map.append(cell_map.alloc, .{
                                 .x = x,
                                 .y = y,
                             });
@@ -1667,10 +1669,13 @@ pub const Page = struct {
 
                         for (self.lookupGrapheme(cell).?) |cp| {
                             try writer.print("{u}", .{cp});
-                            if (opts.cell_map) |cell_map| try cell_map.map.append(cell_map.alloc, .{
-                                .x = x,
-                                .y = y,
-                            });
+                            if (opts.cell_map) |cell_map| {
+                                const utf8_len = std.unicode.utf8CodepointSequenceLength(cp) catch unreachable;
+                                for (0..utf8_len) |_| try cell_map.map.append(cell_map.alloc, .{
+                                    .x = x,
+                                    .y = y,
+                                });
+                            }
                         }
                     },
 

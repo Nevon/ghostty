@@ -33,6 +33,7 @@ pub const DCS = Parser.Action.DCS;
 pub const MouseShape = @import("mouse_shape.zig").MouseShape;
 pub const Page = page.Page;
 pub const PageList = @import("PageList.zig");
+pub const PageListSearch = search.PageListSearch;
 pub const Parser = @import("Parser.zig");
 pub const Pin = PageList.Pin;
 pub const Point = point.Point;

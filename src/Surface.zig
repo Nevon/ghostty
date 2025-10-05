@@ -1812,6 +1812,8 @@ pub fn performSearch(
     }
 
     if (needle.len == 0) {
+        // Mark screen as dirty to clear any remaining highlights
+        screen.dirty.search_matches = true;
         try self.queueRender();
         return null;
     }
@@ -1823,25 +1825,29 @@ pub fn performSearch(
     );
     defer search.deinit();
 
-    var matches = std.ArrayList(terminal.Selection).init(self.alloc);
-    errdefer matches.deinit();
+    var matches: std.ArrayList(terminal.Selection) = .empty;
+    errdefer matches.deinit(self.alloc);
 
     while (try search.next()) |sel| {
-        try matches.append(sel);
+        try matches.append(self.alloc, sel);
     }
 
     if (matches.items.len == 0) {
-        matches.deinit();
+        matches.deinit(self.alloc);
         try self.queueRender();
         return .{ .current = 0, .total = 0 };
     }
 
     screen.search_state = .{
         .needle = try self.alloc.dupe(u8, needle),
-        .matches = try matches.toOwnedSlice(),
+        .matches = try matches.toOwnedSlice(self.alloc),
         .current_match = 0,
         .alloc = self.alloc,
+        .owns_needle = true, // Original search state owns the needle
     };
+
+    // Mark screen as dirty to trigger full redraw with search highlights
+    screen.dirty.search_matches = true;
 
     try self.scrollToSearchMatch(0);
     try self.queueRender();
@@ -1897,6 +1903,9 @@ pub fn closeSearch(self: *Surface) !void {
         screen.search_state = null;
     }
 
+    // Always mark screen as dirty to clear search highlights, even if
+    // search_state was already null (e.g., from an empty search box)
+    screen.dirty.search_matches = true;
     try self.queueRender();
 }
 
@@ -1908,13 +1917,15 @@ fn scrollToSearchMatch(self: *Surface, match_idx: usize) !void {
     const match = state.matches[match_idx];
     const pin = match.start();
 
-    const pt = screen.pages.pointFromPin(.viewport, pin) orelse return;
-
-    const target_row = pt.viewport.y;
+    // Position the match roughly 1/3 from the top of the viewport for better visibility
     const viewport_height = screen.pages.rows;
-    const scroll_target = target_row -| (viewport_height / 3);
+    const offset = viewport_height / 3;
+    const scroll_pin = switch (pin.upOverflow(offset)) {
+        .offset => |p| p,
+        .overflow => |o| o.end, // If we overflow, use the topmost position
+    };
 
-    screen.pages.scrollTo(scroll_target);
+    screen.pages.scroll(.{ .pin = scroll_pin });
 }
 
 /// Returns the x/y coordinate of where the IME (Input Method Editor)

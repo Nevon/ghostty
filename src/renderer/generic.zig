@@ -540,6 +540,10 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             foreground: terminal.color.RGB,
             selection_background: ?configpkg.Config.TerminalColor,
             selection_foreground: ?configpkg.Config.TerminalColor,
+            search_match_background: ?configpkg.Config.TerminalColor,
+            search_match_foreground: ?configpkg.Config.TerminalColor,
+            search_match_current_background: ?configpkg.Config.TerminalColor,
+            search_match_current_foreground: ?configpkg.Config.TerminalColor,
             bold_color: ?configpkg.BoldColor,
             faint_opacity: u8,
             min_contrast: f32,
@@ -611,6 +615,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
                     .selection_background = config.@"selection-background",
                     .selection_foreground = config.@"selection-foreground",
+
+                    .search_match_background = config.@"search-match-background",
+                    .search_match_foreground = config.@"search-match-foreground",
+                    .search_match_current_background = config.@"search-match-current-background",
+                    .search_match_current_foreground = config.@"search-match-current-foreground",
 
                     .custom_shaders = custom_shaders,
                     .bg_image = bg_image,
@@ -2584,6 +2593,35 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     else
                         false;
 
+                    // Check if this cell is in a search match, and if so, whether
+                    // it's the current focused match
+                    const SearchMatchInfo = struct {
+                        is_current: bool,
+                    };
+                    const in_search_match: ?SearchMatchInfo = search: {
+                        const search_state = screen.search_state orelse break :search null;
+                        const pin = terminal.Pin{
+                            .node = row.node,
+                            .y = row.y,
+                            .x = @intCast(
+                                // Spacer tails should show the search match
+                                // state of the wide cell they belong to.
+                                if (wide == .spacer_tail)
+                                    x -| 1
+                                else
+                                    x,
+                            ),
+                        };
+                        for (search_state.matches, 0..) |match, idx| {
+                            if (match.contains(screen, pin)) {
+                                break :search .{
+                                    .is_current = (idx == search_state.current_match),
+                                };
+                            }
+                        }
+                        break :search null;
+                    };
+
                     // The `_style` suffixed values are the colors based on
                     // the cell style (SGR), before applying any additional
                     // configuration, inversions, selections, etc.
@@ -2595,6 +2633,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     });
 
                     // The final background color for the cell.
+                    // Priority: primary selection > current search match > search match > normal
                     const bg = bg: {
                         if (selected) {
                             // If we have an explicit selection background color
@@ -2612,7 +2651,34 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                             break :bg self.foreground_color orelse self.default_foreground_color;
                         }
 
-                        // Not selected
+                        // Check for search match highlighting
+                        if (in_search_match) |match_info| {
+                            if (match_info.is_current) {
+                                // Current search match
+                                if (self.config.search_match_current_background) |v| {
+                                    break :bg switch (v) {
+                                        .color => |color| color.toTerminalRGB(),
+                                        .@"cell-foreground" => if (style.flags.inverse) bg_style else fg_style,
+                                        .@"cell-background" => if (style.flags.inverse) fg_style else bg_style,
+                                    };
+                                }
+                                // Default: bright orange for current match
+                                break :bg terminal.color.RGB{ .r = 255, .g = 165, .b = 0 };
+                            } else {
+                                // Non-current search match
+                                if (self.config.search_match_background) |v| {
+                                    break :bg switch (v) {
+                                        .color => |color| color.toTerminalRGB(),
+                                        .@"cell-foreground" => if (style.flags.inverse) bg_style else fg_style,
+                                        .@"cell-background" => if (style.flags.inverse) fg_style else bg_style,
+                                    };
+                                }
+                                // Default: bright yellow for search matches
+                                break :bg terminal.color.RGB{ .r = 255, .g = 255, .b = 0 };
+                            }
+                        }
+
+                        // Not selected, not in search match
                         break :bg if (style.flags.inverse != isCovering(cell.codepoint()))
                             // Two cases cause us to invert (use the fg color as the bg)
                             // - The "inverse" style flag.
@@ -2652,6 +2718,33 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                             break :fg self.background_color orelse self.default_background_color;
                         }
 
+                        // Check for search match foreground
+                        if (in_search_match) |match_info| {
+                            if (match_info.is_current) {
+                                // Current search match foreground
+                                if (self.config.search_match_current_foreground) |v| {
+                                    break :fg switch (v) {
+                                        .color => |color| color.toTerminalRGB(),
+                                        .@"cell-foreground" => if (style.flags.inverse) final_bg else fg_style,
+                                        .@"cell-background" => if (style.flags.inverse) fg_style else final_bg,
+                                    };
+                                }
+                                // Default: black for good contrast with orange background
+                                break :fg terminal.color.RGB{ .r = 0, .g = 0, .b = 0 };
+                            } else {
+                                // Non-current search match foreground
+                                if (self.config.search_match_foreground) |v| {
+                                    break :fg switch (v) {
+                                        .color => |color| color.toTerminalRGB(),
+                                        .@"cell-foreground" => if (style.flags.inverse) final_bg else fg_style,
+                                        .@"cell-background" => if (style.flags.inverse) fg_style else final_bg,
+                                    };
+                                }
+                                // Default: black for good contrast with yellow background
+                                break :fg terminal.color.RGB{ .r = 0, .g = 0, .b = 0 };
+                            }
+                        }
+
                         break :fg if (style.flags.inverse)
                             final_bg
                         else
@@ -2674,6 +2767,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
                             // Cells that are selected should be fully opaque.
                             if (selected) break :bg_alpha default;
+
+                            // Cells in search matches should be fully opaque.
+                            if (in_search_match != null) break :bg_alpha default;
 
                             // Cells that are reversed should be fully opaque.
                             if (style.flags.inverse) break :bg_alpha default;

@@ -1789,6 +1789,34 @@ pub const Surface = extern struct {
         self.as(gobject.Object).notifyByPspec(properties.@"mouse-hover-url".impl.param_spec);
     }
 
+    /// Perform a search on this surface. Delegates to core surface.
+    pub fn performSearch(self: *Self, needle: [:0]const u8) !?CoreSurface.SearchResult {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return null;
+        return core_surface.performSearch(needle);
+    }
+
+    /// Navigate to the next search match. Delegates to core surface.
+    pub fn nextSearchMatch(self: *Self) !?CoreSurface.SearchResult {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return null;
+        return core_surface.nextSearchMatch();
+    }
+
+    /// Navigate to the previous search match. Delegates to core surface.
+    pub fn previousSearchMatch(self: *Self) !?CoreSurface.SearchResult {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return null;
+        return core_surface.previousSearchMatch();
+    }
+
+    /// Close the search. Delegates to core surface.
+    pub fn closeSearch(self: *Self) !void {
+        const priv = self.private();
+        const core_surface = priv.core_surface orelse return;
+        return core_surface.closeSearch();
+    }
+
     pub fn getBellRinging(self: *Self) bool {
         return self.private().bell_ringing;
     }
