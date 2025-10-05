@@ -1868,6 +1868,9 @@ pub fn nextSearchMatch(self: *Surface) !?SearchResult {
     const next = (state.current_match.? + 1) % state.matches.len;
     state.current_match = next;
 
+    // Mark screen as dirty to update match highlighting
+    screen.dirty.search_matches = true;
+
     try self.scrollToSearchMatch(next);
     try self.queueRender();
 
@@ -1887,6 +1890,9 @@ pub fn previousSearchMatch(self: *Surface) !?SearchResult {
     else
         state.current_match.? - 1;
     state.current_match = prev;
+
+    // Mark screen as dirty to update match highlighting
+    screen.dirty.search_matches = true;
 
     try self.scrollToSearchMatch(prev);
     try self.queueRender();

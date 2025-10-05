@@ -521,6 +521,9 @@ pub const Tab = extern struct {
         // Update counter
         if (result) |r| {
             priv.search_overlay.updateCounter(r.current, r.total);
+        } else {
+            // Empty search string - clear counter
+            priv.search_overlay.clearCounter();
         }
     }
 
@@ -565,6 +568,12 @@ pub const Tab = extern struct {
             log.err("close search failed: {}", .{err});
             return;
         };
+
+        // Clear the search text in the overlay
+        priv.search_overlay.clearSearch();
+
+        // Reset counter to empty (initial state, not "No matches")
+        priv.search_overlay.clearCounter();
     }
 
     //---------------------------------------------------------------

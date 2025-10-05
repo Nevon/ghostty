@@ -204,6 +204,12 @@ pub const SearchOverlay = extern struct {
         gtk.Editable.setText(priv.search.as(gtk.Editable), "");
     }
 
+    /// Clear the counter label (set to initial empty state)
+    pub fn clearCounter(self: *SearchOverlay) void {
+        const priv = self.private();
+        gtk.Label.setLabel(priv.counter, "");
+    }
+
     /// Get the search mode state
     pub fn getSearchMode(self: *SearchOverlay) bool {
         const priv = self.private();
