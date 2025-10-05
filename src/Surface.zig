@@ -1792,6 +1792,131 @@ pub fn pwd(
     return try alloc.dupe(u8, terminal_pwd);
 }
 
+pub const SearchResult = struct {
+    current: usize,
+    total: usize,
+};
+
+pub fn performSearch(
+    self: *Surface,
+    needle: []const u8,
+) !?SearchResult {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const screen = &self.io.terminal.screen;
+
+    if (screen.search_state) |*state| {
+        state.deinit();
+        screen.search_state = null;
+    }
+
+    if (needle.len == 0) {
+        try self.queueRender();
+        return null;
+    }
+
+    var search = try terminal.PageListSearch.init(
+        self.alloc,
+        &screen.pages,
+        needle,
+    );
+    defer search.deinit();
+
+    var matches = std.ArrayList(terminal.Selection).init(self.alloc);
+    errdefer matches.deinit();
+
+    while (try search.next()) |sel| {
+        try matches.append(sel);
+    }
+
+    if (matches.items.len == 0) {
+        matches.deinit();
+        try self.queueRender();
+        return .{ .current = 0, .total = 0 };
+    }
+
+    screen.search_state = .{
+        .needle = try self.alloc.dupe(u8, needle),
+        .matches = try matches.toOwnedSlice(),
+        .current_match = 0,
+        .alloc = self.alloc,
+    };
+
+    try self.scrollToSearchMatch(0);
+    try self.queueRender();
+
+    return .{ .current = 1, .total = screen.search_state.?.matches.len };
+}
+
+pub fn nextSearchMatch(self: *Surface) !?SearchResult {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const screen = &self.io.terminal.screen;
+    const state = &(screen.search_state orelse return null);
+    if (state.matches.len == 0) return null;
+
+    const next = (state.current_match.? + 1) % state.matches.len;
+    state.current_match = next;
+
+    try self.scrollToSearchMatch(next);
+    try self.queueRender();
+
+    return .{ .current = next + 1, .total = state.matches.len };
+}
+
+pub fn previousSearchMatch(self: *Surface) !?SearchResult {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const screen = &self.io.terminal.screen;
+    const state = &(screen.search_state orelse return null);
+    if (state.matches.len == 0) return null;
+
+    const prev = if (state.current_match.? == 0)
+        state.matches.len - 1
+    else
+        state.current_match.? - 1;
+    state.current_match = prev;
+
+    try self.scrollToSearchMatch(prev);
+    try self.queueRender();
+
+    return .{ .current = prev + 1, .total = state.matches.len };
+}
+
+pub fn closeSearch(self: *Surface) !void {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const screen = &self.io.terminal.screen;
+
+    if (screen.search_state) |*state| {
+        state.deinit();
+        screen.search_state = null;
+    }
+
+    try self.queueRender();
+}
+
+fn scrollToSearchMatch(self: *Surface, match_idx: usize) !void {
+    const screen = &self.io.terminal.screen;
+    const state = screen.search_state orelse return;
+    if (match_idx >= state.matches.len) return;
+
+    const match = state.matches[match_idx];
+    const pin = match.start();
+
+    const pt = screen.pages.pointFromPin(.viewport, pin) orelse return;
+
+    const target_row = pt.viewport.y;
+    const viewport_height = screen.pages.rows;
+    const scroll_target = target_row -| (viewport_height / 3);
+
+    screen.pages.scrollTo(scroll_target);
+}
+
 /// Returns the x/y coordinate of where the IME (Input Method Editor)
 /// keyboard should be rendered.
 pub fn imePoint(self: *const Surface) apprt.IMEPos {
@@ -4974,6 +5099,24 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
         .toggle_command_palette => return try self.rt_app.performAction(
             .{ .surface = self },
             .toggle_command_palette,
+            {},
+        ),
+
+        .toggle_search => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .toggle_search,
+            {},
+        ),
+
+        .next_search_match => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .next_search_match,
+            {},
+        ),
+
+        .previous_search_match => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .previous_search_match,
             {},
         ),
 

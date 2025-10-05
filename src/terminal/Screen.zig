@@ -52,6 +52,11 @@ saved_cursor: ?SavedCursor = null,
 /// automatically setup tracking.
 selection: ?Selection = null,
 
+/// The current search state for this screen (if any). Contains the search
+/// needle, all match selections, and the currently focused match index for
+/// navigation. This is used to highlight search results in the renderer.
+search_state: ?SearchState = null,
+
 /// The charset state
 charset: CharsetState = .{},
 
@@ -172,6 +177,28 @@ pub const CharsetState = struct {
 
     /// An array to map a charset slot to a lookup table.
     const CharsetArray = std.EnumArray(charsets.Slots, charsets.Charset);
+};
+
+/// Search state for highlighting search matches in the terminal.
+pub const SearchState = struct {
+    /// The current search term. Owned by this struct.
+    needle: []const u8,
+
+    /// All match selections for highlighting all matches. These are
+    /// untracked selections returned by PageListSearch and don't need
+    /// individual cleanup.
+    matches: []Selection,
+
+    /// Index of currently focused match for navigation.
+    current_match: ?usize,
+
+    /// Allocator for search lifetime allocations.
+    alloc: Allocator,
+
+    pub fn deinit(self: *SearchState) void {
+        self.alloc.free(self.needle);
+        self.alloc.free(self.matches);
+    }
 };
 
 /// Initialize a new screen.

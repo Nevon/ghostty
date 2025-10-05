@@ -298,6 +298,15 @@ pub const Action = union(Key) {
     /// A command has finished,
     command_finished: CommandFinished,
 
+    /// Toggle the search overlay for scrollback search.
+    toggle_search,
+
+    /// Navigate to the next search match.
+    next_search_match,
+
+    /// Navigate to the previous search match.
+    previous_search_match,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -354,6 +363,9 @@ pub const Action = union(Key) {
         progress_report,
         show_on_screen_keyboard,
         command_finished,
+        toggle_search,
+        next_search_match,
+        previous_search_match,
     };
 
     /// Sync with: ghostty_action_u

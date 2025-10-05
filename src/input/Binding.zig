@@ -643,6 +643,28 @@ pub const Action = union(enum) {
     /// version can be found by running `ghostty +version`.
     toggle_command_palette,
 
+    /// Toggle the search overlay for scrollback search.
+    ///
+    /// Opens a search bar that allows searching through the terminal scrollback
+    /// buffer. All matches are highlighted, and the current match is visually
+    /// distinct. Use `next_search_match` and `previous_search_match` to navigate
+    /// between matches.
+    toggle_search,
+
+    /// Navigate to the next search match.
+    ///
+    /// Moves focus to the next search match in the scrollback buffer, wrapping
+    /// around to the first match after the last one. Only works when search
+    /// is active.
+    next_search_match,
+
+    /// Navigate to the previous search match.
+    ///
+    /// Moves focus to the previous search match in the scrollback buffer, wrapping
+    /// around to the last match after the first one. Only works when search
+    /// is active.
+    previous_search_match,
+
     /// Toggle the quick terminal.
     ///
     /// The quick terminal, also known as the "Quake-style" or drop-down
@@ -1095,6 +1117,9 @@ pub const Action = union(enum) {
             .toggle_window_float_on_top,
             .toggle_secure_input,
             .toggle_command_palette,
+            .toggle_search,
+            .next_search_match,
+            .previous_search_match,
             .show_on_screen_keyboard,
             .reset_window_size,
             .crash,

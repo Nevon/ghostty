@@ -449,6 +449,12 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Toggle secure input mode.",
         }},
 
+        .toggle_search => comptime &.{.{
+            .action = .toggle_search,
+            .title = "Toggle Search",
+            .description = "Open or close the search overlay for finding text in the scrollback buffer.",
+        }},
+
         .check_for_updates => comptime &.{.{
             .action = .check_for_updates,
             .title = "Check for Updates",
@@ -505,6 +511,8 @@ fn actionCommands(action: Action.Key) []const Command {
         .previous_tab,
         .next_tab,
         .last_tab,
+        .next_search_match,
+        .previous_search_match,
         => comptime &.{},
 
         // No commands for obvious reasons
