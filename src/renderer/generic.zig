@@ -2600,7 +2600,10 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     };
                     const in_search_match: ?SearchMatchInfo = search: {
                         const search_state = screen.search_state orelse break :search null;
-                        const pin = terminal.Pin{
+                        const original_pages = search_state.original_pages orelse break :search null;
+
+                        // Convert the cloned screen's pin to a viewport coordinate
+                        const viewport_point = screen.pages.pointFromPin(.viewport, terminal.Pin{
                             .node = row.node,
                             .y = row.y,
                             .x = @intCast(
@@ -2611,9 +2614,27 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                                 else
                                     x,
                             ),
+                        }) orelse break :search null;
+
+                        // Convert to a pin in the original pagelist using viewport coordinates
+                        const original_pin = original_pages.pin(.{
+                            .viewport = viewport_point.viewport,
+                        }) orelse break :search null;
+
+                        // Check matches against the pins from the original pagelist
+                        // We create a temporary screen-like structure to pass to contains()
+                        const temp_screen = terminal.Screen{
+                            .alloc = undefined, // Not used by contains()
+                            .pages = original_pages.*,
+                            .cursor = undefined, // Not used by contains()
+                            .no_scrollback = false,
+                            .selection = null,
+                            .search_state = null,
+                            .dirty = .{},
                         };
+
                         for (search_state.matches, 0..) |match, idx| {
-                            if (match.contains(screen, pin)) {
+                            if (match.contains(&temp_screen, original_pin)) {
                                 break :search .{
                                     .is_current = (idx == search_state.current_match),
                                 };

@@ -204,11 +204,22 @@ pub const SearchState = struct {
     /// Cloned screens share the needle pointer and should not free it.
     owns_needle: bool,
 
+    /// Whether this SearchState owns the matches array and should free it on deinit.
+    /// Cloned screens share the matches array and should not free it.
+    owns_matches: bool,
+
+    /// For cloned screens, a pointer to the original screen's pagelist.
+    /// This is needed to check search matches since the match pins point
+    /// to the original pagelist, not the cloned one.
+    original_pages: ?*const PageList,
+
     pub fn deinit(self: *SearchState) void {
         if (self.owns_needle) {
             self.alloc.free(self.needle);
         }
-        self.alloc.free(self.matches);
+        if (self.owns_matches) {
+            self.alloc.free(self.matches);
+        }
     }
 };
 
@@ -495,83 +506,16 @@ pub fn clonePool(
         };
     } else null;
 
-    // Filter search matches to only those within the cloned viewport
-    const search_state: ?SearchState = if (self.search_state) |state| blk: {
-        var filtered_matches: std.ArrayList(Selection) = .empty;
-        errdefer filtered_matches.deinit(alloc);
-
-        // Get the screen coordinate range of the cloned area by looking at the
-        // cloned pagelist bounds (which was already created above)
-        const clone_top_pin = pages.pin(.{ .viewport = .{} }) orelse break :blk null;
-        const clone_top_y = (pages.pointFromPin(.screen, clone_top_pin) orelse break :blk null).screen.y;
-
-        // For bottom, use the last row of the cloned pages
-        const clone_bot_pin = pages.pin(.{ .viewport = .{
-            .x = 0,
-            .y = pages.rows - 1,
-        } }) orelse break :blk null;
-        const clone_bot_y = (pages.pointFromPin(.screen, clone_bot_pin) orelse break :blk null).screen.y;
-
-        for (state.matches) |match| {
-            // Convert the match pins to screen coordinates
-            const start_pin = match.start();
-            const end_pin = match.end();
-
-            const start_pt = self.pages.pointFromPin(.screen, start_pin) orelse continue;
-            const end_pt = self.pages.pointFromPin(.screen, end_pin) orelse continue;
-
-            // Check if the match overlaps with the cloned range
-            if (end_pt.screen.y < clone_top_y or start_pt.screen.y > clone_bot_y) continue;
-
-            // Clamp the match to the cloned range and convert to the cloned pagelist coordinates
-            const clamped_start_y = @max(start_pt.screen.y, clone_top_y);
-            const clamped_end_y = @min(end_pt.screen.y, clone_bot_y);
-
-            // Convert clamped screen coordinates to pins in the cloned pagelist
-            // The cloned pagelist starts at screen y = clone_top_y, which maps to y = 0 in the clone
-            const new_start_y = clamped_start_y - clone_top_y;
-            const new_end_y = clamped_end_y - clone_top_y;
-
-            const new_start_x = if (clamped_start_y == start_pt.screen.y) start_pt.screen.x else 0;
-            const new_end_x = if (clamped_end_y == end_pt.screen.y) end_pt.screen.x else pages.cols - 1;
-
-            // Find the pin in the cloned pagelist
-            const new_start_pin = pages.pin(.{
-                .screen = .{
-                    .x = new_start_x,
-                    .y = @intCast(new_start_y),
-                },
-            }) orelse continue;
-
-            const new_end_pin = pages.pin(.{
-                .screen = .{
-                    .x = new_end_x,
-                    .y = @intCast(new_end_y),
-                },
-            }) orelse continue;
-
-            // Keep search matches as untracked, just like in the original screen
-            try filtered_matches.append(alloc, .{
-                .bounds = .{ .untracked = .{
-                    .start = new_start_pin,
-                    .end = new_end_pin,
-                } },
-                .rectangle = false,
-            });
-        }
-
-        if (filtered_matches.items.len == 0) {
-            filtered_matches.deinit(alloc);
-            break :blk null;
-        }
-
-        break :blk .{
-            .needle = state.needle, // Shared, not owned by clone
-            .matches = try filtered_matches.toOwnedSlice(alloc),
-            .current_match = state.current_match,
-            .alloc = alloc,
-            .owns_needle = false, // Clone does not own the needle
-        };
+    // Copy search state directly - the renderer will handle checking if matches
+    // are within the visible viewport
+    const search_state: ?SearchState = if (self.search_state) |state| .{
+        .needle = state.needle, // Shared, not owned by clone
+        .matches = state.matches, // Shared array, not owned by clone
+        .current_match = state.current_match,
+        .alloc = alloc,
+        .owns_needle = false, // Clone does not own the needle
+        .owns_matches = false, // Clone does not own the matches array
+        .original_pages = &self.pages, // Store reference to original pagelist
     } else null;
 
     const result: Screen = .{

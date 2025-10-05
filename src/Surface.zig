@@ -1844,6 +1844,8 @@ pub fn performSearch(
         .current_match = 0,
         .alloc = self.alloc,
         .owns_needle = true, // Original search state owns the needle
+        .owns_matches = true, // Original search state owns the matches
+        .original_pages = null, // Original screen doesn't need this
     };
 
     // Mark screen as dirty to trigger full redraw with search highlights
